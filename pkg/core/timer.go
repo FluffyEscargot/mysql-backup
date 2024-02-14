@@ -61,6 +61,7 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 	if opts.Begin != "" {
 		// calculate delay based on begin time
 		delay, err = waitForBeginTime(opts.Begin, now)
+		fmt.Println(now)
 		if err != nil {
 			return nil, fmt.Errorf("invalid begin option '%s': %v", opts.Begin, err)
 		}
@@ -146,7 +147,7 @@ func waitForBeginTime(begin string, from time.Time) (time.Duration, error) {
 		}
 
 		// convert that start time into a Duration to wait
-		today := time.Date(from.Year(), from.Month(), from.Day(), hour, minute, from.Second(), from.Nanosecond(), time.UTC)
+		today := time.Date(from.Year(), from.Month(), from.Day(), hour, minute, from.Second(), from.Nanosecond(), from.Location())
 		if today.After(from) {
 			delay = today.Sub(from)
 		} else {

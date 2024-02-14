@@ -51,6 +51,8 @@ func TestWaitForBeginTime(t *testing.T) {
 		{"wait until 10:23", "1023", "2018-10-10T10:00:00Z", 23 * time.Minute, nil},
 		{"wait until 23:59", "2359", "2018-10-10T10:00:00Z", 13*time.Hour + 59*time.Minute, nil},
 		{"wait until 9:59", "0959", "2018-10-10T10:00:00Z", 23*time.Hour + 59*time.Minute, nil},
+		{"wait until 10:23 +1 TZ", "1023", "2018-10-10T10:00:00+01:00", 23 * time.Minute, nil},
+		{"wait until 10:23 -1 TZ", "1023", "2018-10-10T10:00:00-01:00", 23 * time.Minute, nil},
 		{"fail text", "today", "2018-10-10T10:00:00Z", time.Duration(0), fmt.Errorf("invalid format for begin delay 'today'")},
 		{"fail number", "1", "2018-10-10T10:00:00Z", time.Duration(0), fmt.Errorf("invalid format for begin delay '1'")},
 		{"fail +hour", "+1h", "2018-10-10T10:00:00Z", time.Duration(0), fmt.Errorf("invalid format for begin delay '+1h'")},

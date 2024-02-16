@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -39,6 +40,16 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 	)
 
 	now := time.Now()
+
+	// validate we do not have conflicting options
+	if opts.Once && (opts.Cron != "" || opts.Begin != "" || opts.Frequency != 0) {
+		return nil, errors.New("option 'Once' is exclusive and must not be used with Begin, Cron or Frequency")
+	}
+
+	if opts.Cron != "" && (opts.Begin != "" || opts.Frequency != 0) {
+		return nil, errors.New("option 'Cron' is exclusive and must not be used with Begin, Once or Frequency")
+	}
+
 	// parse the options to determine our delays
 	if opts.Cron != "" {
 		// calculate delay until next cron moment as defined
@@ -46,50 +57,12 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid cron format '%s': %v", opts.Cron, err)
 		}
-	} else if opts.Begin != "" {
-		// calculate how long to wait
-		minsRe, err := regexp.Compile(`^\+([0-9]+)$`)
+	}
+	if opts.Begin != "" {
+		// calculate delay based on begin time
+		delay, err = waitForBeginTime(opts.Begin, now)
 		if err != nil {
-			return nil, fmt.Errorf("invalid matcher for checking begin delay options: %v", err)
-		}
-		timeRe, err := regexp.Compile(`([0-9][0-9])([0-9][0-9])`)
-		if err != nil {
-			return nil, fmt.Errorf("invalid matcher for checking begin delay options: %v", err)
-		}
-
-		// first look for +MM, which means delay MM minutes
-		delayMinsParts := minsRe.FindStringSubmatch(opts.Begin)
-		startTimeParts := timeRe.FindStringSubmatch(opts.Begin)
-
-		switch {
-		case len(delayMinsParts) > 1:
-			delayMins, err := strconv.Atoi(delayMinsParts[1])
-			if err != nil {
-				return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
-			}
-			delay = time.Duration(delayMins) * time.Minute
-		case len(startTimeParts) > 3:
-			hour, err := strconv.Atoi(startTimeParts[1])
-			if err != nil {
-				return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
-			}
-			minute, err := strconv.Atoi(startTimeParts[2])
-			if err != nil {
-				return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
-			}
-
-			// convert that start time into a Duration to wait
-			now := time.Now()
-
-			today := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, now.Second(), now.Nanosecond(), time.UTC)
-			if today.After(now) {
-				delay = today.Sub(now)
-			} else {
-				// add one day
-				delay = today.Add(24 * time.Hour).Sub(now)
-			}
-		default:
-			return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
+			return nil, fmt.Errorf("invalid begin option '%s': %v", opts.Begin, err)
 		}
 	}
 
@@ -136,6 +109,54 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 		}
 	}(opts)
 	return c, nil
+}
+
+func waitForBeginTime(begin string, from time.Time) (time.Duration, error) {
+
+	// calculate how long to wait
+	minsRe, err := regexp.Compile(`^\+([0-9]+)$`)
+	if err != nil {
+		return time.Duration(0), fmt.Errorf("invalid matcher for checking begin delay options: %v", err)
+	}
+	timeRe, err := regexp.Compile(`([0-9][0-9])([0-9][0-9])`)
+	if err != nil {
+		return time.Duration(0), fmt.Errorf("invalid matcher for checking begin delay options: %v", err)
+	}
+
+	// first look for +MM, which means delay MM minutes
+	delayMinsParts := minsRe.FindStringSubmatch(begin)
+	startTimeParts := timeRe.FindStringSubmatch(begin)
+
+	var delay time.Duration
+	switch {
+	case len(delayMinsParts) > 1:
+		delayMins, err := strconv.Atoi(delayMinsParts[1])
+		if err != nil {
+			return time.Duration(0), fmt.Errorf("invalid format for begin delay '%s': %v", begin, err)
+		}
+		delay = time.Duration(delayMins) * time.Minute
+	case len(startTimeParts) > 2:
+		hour, err := strconv.Atoi(startTimeParts[1])
+		if err != nil {
+			return time.Duration(0), fmt.Errorf("invalid format for begin delay '%s': %v", begin, err)
+		}
+		minute, err := strconv.Atoi(startTimeParts[2])
+		if err != nil {
+			return time.Duration(0), fmt.Errorf("invalid format for begin delay '%s': %v", begin, err)
+		}
+
+		// convert that start time into a Duration to wait
+		today := time.Date(from.Year(), from.Month(), from.Day(), hour, minute, from.Second(), from.Nanosecond(), time.UTC)
+		if today.After(from) {
+			delay = today.Sub(from)
+		} else {
+			// add one day
+			delay = today.Add(24 * time.Hour).Sub(from)
+		}
+	default:
+		return time.Duration(0), fmt.Errorf("invalid format for begin delay '%s'", begin)
+	}
+	return delay, nil
 }
 
 // waitForCron given the current time and a cron string, calculate the Duration

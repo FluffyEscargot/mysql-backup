@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -40,12 +39,6 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 	)
 
 	now := time.Now()
-
-	// validate we do not have conflicting options
-	if opts.Once && (opts.Cron != "" || opts.Begin != "" || opts.Frequency != 0) {
-		return nil, errors.New("option 'Once' is exclusive and must not be used with Begin, Cron or Frequency")
-	}
-
 	// parse the options to determine our delays
 	if opts.Cron != "" {
 		// calculate delay until next cron moment as defined
@@ -75,7 +68,7 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 				return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
 			}
 			delay = time.Duration(delayMins) * time.Minute
-		case len(startTimeParts) > 2:
+		case len(startTimeParts) > 3:
 			hour, err := strconv.Atoi(startTimeParts[1])
 			if err != nil {
 				return nil, fmt.Errorf("invalid format for begin delay '%s': %v", opts.Begin, err)
@@ -88,7 +81,7 @@ func Timer(opts TimerOptions) (<-chan Update, error) {
 			// convert that start time into a Duration to wait
 			now := time.Now()
 
-			today := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, now.Second(), now.Nanosecond(), time.Local)
+			today := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, now.Second(), now.Nanosecond(), time.UTC)
 			if today.After(now) {
 				delay = today.Sub(now)
 			} else {
